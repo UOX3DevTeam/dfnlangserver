@@ -1,0 +1,56 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "UOX3 Definition",
+	"patterns": [
+		{ "include": "#header" },
+		{ "include": "#braces" },
+		{ "include": "#keyvalue" },
+		{ "include": "#comment" }
+	],
+	"repository": {
+    "header": {
+      "patterns": [
+        {
+          "name": "entity.name.section.uox3dfn",
+          "match": "^\\[[A-Z0-9_]+\\]$"
+        }
+      ]
+    },
+    "braces": {
+      "patterns": [
+        {
+          "name": "punctuation.section.block.begin.uox3dfn",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.section.block.end.uox3dfn",
+          "match": "\\}"
+        }
+      ]
+    },
+    "keyvalue": {
+      "patterns": [
+        {
+          "name": "meta.assignment.uox3dfn",
+          "match": "^(\\w+)(=)([^/]+)",
+          "captures": {
+            "1": { "name": "entity.name.tag.uox3dfn" },
+            "2": { "name": "keyword.operator.assignment.uox3dfn" },
+            "3": { "name": "string.unquoted.value.uox3dfn" }
+          }
+        }
+      ]
+    },
+    "comment": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.uox3dfn",
+          "match": "//.*$"
+        }
+      ]
+    }
+	},
+  "foldingStartMarker": "\\{\\s*$",
+  "foldingStopMarker": "^\\s*\\}",
+	"scopeName": "source.uox3dfn"
+}

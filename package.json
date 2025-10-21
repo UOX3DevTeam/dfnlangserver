@@ -1,0 +1,25 @@
+{
+  "name": "uox3dfn",
+  "displayName": "uox3dfn",
+  "description": "DFN file validation",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.105.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "uox3dfn",
+      "aliases": ["UOX3 Definition", "uox3dfn"],
+      "extensions": [".dfn"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "uox3dfn",
+      "scopeName": "source.uox3dfn",
+      "path": "./syntaxes/uox3dfn.tmLanguage.json"
+    }]
+  }
+}
