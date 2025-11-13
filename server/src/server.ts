@@ -1,7 +1,7 @@
 import { createConnection, TextDocuments, Diagnostic, DiagnosticSeverity, ProposedFeatures, CompletionItem, CompletionItemKind, TextDocumentSyncKind } from 'vscode-languageserver/node';
 import { URI } from 'vscode-uri';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { Definition, DefinitionCategory, dirNames, Section } from './dfndm';
+import { Definition, DefinitionCategory, dirNames, getDefinitionCategories, Section } from './dfndm';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -17,7 +17,21 @@ connection.onInitialize(() => ({
   },
 }));
 
-function createError(message: string, line: number, length: number, severity: DiagnosticSeverity = DiagnosticSeverity.Error): Diagnostic {
+function createError(source: string, line: number, length: number, cat?: DefinitionCategory, section?: Section, severity: DiagnosticSeverity = DiagnosticSeverity.Error): Diagnostic {
+  let message = source;
+  if (cat || section) {
+    message += '[ ';
+    if (cat) {
+      message += dirNames[cat];
+      if (section) {
+        message += ', ';
+      }
+    }
+    if (section) {
+      message += section.header;
+    }
+    message += ' ]';
+  }
   return {
     severity: severity,
     range:    {
@@ -30,7 +44,10 @@ function createError(message: string, line: number, length: number, severity: Di
 }
 
 // --- Parser
-export function parseDocument(text: string): {
+export function parseDocument(
+  text: string,
+  cat: DefinitionCategory | undefined,
+): {
   sections: Section[];
   errors:   Diagnostic[];
 } {
@@ -53,7 +70,7 @@ export function parseDocument(text: string): {
 
     if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
       if (insideBlock) {
-        errors.push(createError(`Line ${String(i + 1)}: New section before closing '}'`, i, line.length));
+        errors.push(createError(`Line ${String(i + 1)}: New section before closing '}'`, i, line.length, cat, current));
       }
       current = { header: trimmed.slice(1, -1), entries: {}, startLine: i };
       sections.push(current);
@@ -70,30 +87,31 @@ export function parseDocument(text: string): {
     if (insideBlock && current) {
       const match = /^(\w+)=(.*)$/.exec(trimmed);
       if (!match) {
-        errors.push(createError(`Line ${String(i + 1)}: Invalid entry in ${current.header}`, i, line.length));
+        errors.push(createError(`Line ${String(i + 1)}: Invalid entry`, i, line.length, cat, current));
       } else {
         current.entries[match[1]] = match[2];
         if (match[2].trim().length == 0) {
-          errors.push(createError(`Line ${String(i + 1)}: entry ${match[1]} in ${current.header} has no value`, i, line.length, DiagnosticSeverity.Warning));
+          errors.push(createError(`Line ${String(i + 1)}: entry ${match[1]} has no value`, i, line.length, cat, current, DiagnosticSeverity.Warning));
         }
       }
     } else {
-      errors.push(createError(`Line ${String(i + 1)}: Content outside of a block`, i, line.length));
+      errors.push(createError(`Line ${String(i + 1)}: Content outside of a block`, i, line.length, cat, undefined));
     }
   }
   if (insideBlock) {
-    errors.push(createError("File ended before closing '}'", -1, 0));
+    errors.push(createError("File ended before closing '}'", -1, 0, cat));
   }
   return { sections, errors };
 }
 
 // --- Validation
 function validateTextDocument(doc: TextDocument) {
-  const { sections, errors } = parseDocument(doc.getText());
+  const cat = calculateCat(doc.uri);
+  const { sections, errors } = parseDocument(doc.getText(), cat);
   const def: Definition = {
     name:     parseFileName(doc.uri).file,
     uri:      doc.uri,
-    cat:      calculateCat(doc.uri),
+    cat:      cat,
     sections: sections,
   };
   const defs = globalDefinitions.get(doc.uri) ?? [];
@@ -105,7 +123,9 @@ function validateTextDocument(doc: TextDocument) {
 
 connection.onCompletion((params): CompletionItem[] => {
   const doc = documents.get(params.textDocument.uri);
-  if (!doc) return [];
+  if (!doc) {
+    return [];
+  }
   return [
     {
       label:  'GET',
@@ -146,9 +166,13 @@ export function parseFileName(source: string): { dir: string; file: string } {
 }
 function calculateCat(uri: string): DefinitionCategory | undefined {
   const { dir } = parseFileName(uri);
-  for (const cat of Object.values(DefinitionCategory) as DefinitionCategory[]) {
+  let formedDir = dir.replaceAll('\\', '/'); // Normalise directory for comparisons
+  if (!formedDir.endsWith('/')) {
+    formedDir += '/';
+  }
+  for (const cat of getDefinitionCategories()) {
     const subset = '/' + dirNames[cat] + '/';
-    if (dir.includes(subset)) {
+    if (formedDir.includes(subset)) {
       return cat;
     }
   }

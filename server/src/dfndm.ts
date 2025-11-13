@@ -64,3 +64,15 @@ export interface Definition {
   cat:      DefinitionCategory | undefined;
   sections: Section[];
 }
+
+export type OptionalCategory = DefinitionCategory | undefined;
+export type OptionalSection = Section | undefined;
+export type OptionalDefinition = Definition | undefined;
+
+function enumValues<E extends Record<string, string | number>>(e: E): E[keyof E][] {
+  return Object.values(e).filter((v): v is E[keyof E] => typeof v === 'number');
+}
+
+export function getDefinitionCategories(): DefinitionCategory[] {
+  return enumValues(DefinitionCategory);
+}
