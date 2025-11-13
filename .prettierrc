@@ -1,0 +1,11 @@
+{
+  "arrowParens": "avoid",
+  "bracketSameLine": false,
+  "bracketSpacing": true,
+  "endOfLine": "lf",
+  "singleAttributePerLine": false,
+  "singleQuote": true,
+  "plugins": ["@huggingface/prettier-plugin-vertical-align"],
+  "alignInGroups": "always",
+  "printWidth": 1024
+}

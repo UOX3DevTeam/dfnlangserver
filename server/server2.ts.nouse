@@ -1,0 +1,173 @@
+import {
+  createConnection,
+  TextDocuments,
+  Diagnostic,
+  DiagnosticSeverity,
+  ProposedFeatures,
+  InitializeParams,
+  CompletionItem,
+  CompletionItemKind,
+} from 'vscode-languageserver/node';
+import { TextDocument } from 'vscode-languageserver-textdocument';
+import * as path from 'path';
+import { URI } from 'vscode-uri';
+
+const connection = createConnection(ProposedFeatures.all);
+const documents = new TextDocuments<TextDocument>(TextDocument);
+
+interface Section {
+  header:    string;
+  entries:   Record<string, string>;
+  startLine: number;
+}
+
+interface Definition {
+  name: string;
+  uri:  string;
+  line: number;
+}
+
+const globalDefinitions = new Map<string, Definition[]>();
+
+// --- Folder rules
+const rulesByFolder: Record<string, { allowedTags: string[] }> = {
+  'src/requests': { allowedTags: ['GET', 'POST', 'PUT'] },
+  'src/config':   { allowedTags: ['SETTING', 'OPTION', 'FLAG'] },
+};
+
+function getRulesForDocument(uri: string) {
+  const fsPath = URI.parse(uri).fsPath;
+  for (const folder in rulesByFolder) {
+    if (fsPath.includes(path.join(folder))) return rulesByFolder[folder];
+  }
+  return { allowedTags: [] };
+}
+
+// --- Parser
+function parseDocument(text: string): {
+  sections: Section[];
+  errors:   string[];
+} {
+  const lines = text.split(/\r?\n/);
+  const sections: Section[] = [];
+  const errors: string[] = [];
+  let current: Section | null = null;
+  let insideBlock = false;
+
+  lines.forEach((line, i) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      if (insideBlock)
+        errors.push(`Line ${i + 1}: New section before closing '}'`);
+      current = { header: trimmed.slice(1, -1), entries: {}, startLine: i };
+      sections.push(current);
+      return;
+    }
+    if (trimmed === '{') {
+      insideBlock = true;
+      return;
+    }
+    if (trimmed === '}') {
+      insideBlock = false;
+      return;
+    }
+    if (insideBlock && current) {
+      const match = /^(\w+)=(.+)$/.exec(trimmed);
+      if (!match) errors.push(`Line ${i + 1}: Invalid entry`);
+      else current.entries[match[1]] = match[2];
+    }
+  });
+  if (insideBlock) errors.push("File ended before closing '}'");
+  return { sections, errors };
+}
+
+// --- Indexing
+function indexFile(uri: string, sections: Section[]) {
+  for (const [key, defs] of globalDefinitions) {
+    globalDefinitions.set(
+      key,
+      defs.filter(d => d.uri !== uri),
+    );
+  }
+  for (const section of sections) {
+    for (const [tag, value] of Object.entries(section.entries)) {
+      if (tag !== 'GET') {
+        const def: Definition = { name: tag, uri, line: section.startLine };
+        const defs = globalDefinitions.get(tag) ?? [];
+        defs.push(def);
+        globalDefinitions.set(tag, defs);
+      }
+    }
+  }
+}
+
+// --- Validation
+function validateTextDocument(doc: TextDocument) {
+  const { sections, errors } = parseDocument(doc.getText());
+  indexFile(doc.uri, sections);
+
+  const diagnostics: Diagnostic[] = [];
+  errors.forEach(err =>
+    diagnostics.push({
+      severity: DiagnosticSeverity.Error,
+      range:    {
+        start: { line: 0, character: 0 },
+        end:   { line: 0, character: 1 },
+      },
+      message: err,
+      source:  'uox3dfn',
+    }),
+  );
+
+  const rules = getRulesForDocument(doc.uri);
+
+  for (const section of sections) {
+    for (const [tag, value] of Object.entries(section.entries)) {
+      if (!rules.allowedTags.includes(tag)) {
+        diagnostics.push({
+          severity: DiagnosticSeverity.Error,
+          range:    {
+            start: { line: section.startLine, character: 0 },
+            end:   { line: section.startLine, character: tag.length },
+          },
+          message: `Tag '${tag}' not allowed here`,
+          source:  'uox3dfn',
+        });
+      }
+      if (tag === 'GET') {
+        const defs = globalDefinitions.get(value);
+        if (!defs || defs.length === 0) {
+          diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range:    {
+              start: { line: section.startLine, character: 0 },
+              end:   { line: section.startLine, character: value.length },
+            },
+            message: `GET references unknown entry: ${value}`,
+            source:  'uox3dfn',
+          });
+        }
+      }
+    }
+  }
+  void connection.sendDiagnostics({ uri: doc.uri, diagnostics });
+}
+
+// --- Completion
+connection.onCompletion(params => {
+  const doc = documents.get(params.textDocument.uri);
+  if (!doc) return [];
+  const rules = getRulesForDocument(doc.uri);
+  return rules.allowedTags.map(tag => ({
+    label:  tag,
+    kind:   CompletionItemKind.Keyword,
+    detail: 'Allowed tag',
+  }));
+});
+
+// --- Lifecycle
+documents.onDidChangeContent(change => {
+  validateTextDocument(change.document);
+});
+documents.listen(connection);
+connection.listen();

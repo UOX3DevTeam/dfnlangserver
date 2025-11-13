@@ -9,17 +9,46 @@
   "categories": [
     "Programming Languages"
   ],
+  "main": "./client/build/extension",
   "contributes": {
-    "languages": [{
-      "id": "uox3dfn",
-      "aliases": ["UOX3 Definition", "uox3dfn"],
-      "extensions": [".dfn"],
-      "configuration": "./language-configuration.json"
-    }],
-    "grammars": [{
-      "language": "uox3dfn",
-      "scopeName": "source.uox3dfn",
-      "path": "./syntaxes/uox3dfn.tmLanguage.json"
-    }]
+    "languages": [
+      {
+        "id": "uox3dfn",
+        "aliases": [
+          "UOX3 Definition",
+          "uox3dfn"
+        ],
+        "extensions": [
+          ".dfn"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "uox3dfn",
+        "scopeName": "source.uox3dfn",
+        "path": "./syntaxes/uox3dfn.tmLanguage.json"
+      }
+    ]
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@stylistic/eslint-plugin": "^5.5.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22",
+    "eslint": "^9.39.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "@huggingface/prettier-plugin-vertical-align": "^0.2.3",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.6.2"
+  },
+  "scripts": {
+    "vscode:prepublish": "cd client && npm install && cd .. && npm run compile",
+    "compile": "tsc -b",
+    "watch": "tsc -b -w",
+    "lint": "eslint",
+    "postinstall": "cd client && npm install && cd ../server && npm install && cd .."
   }
 }
